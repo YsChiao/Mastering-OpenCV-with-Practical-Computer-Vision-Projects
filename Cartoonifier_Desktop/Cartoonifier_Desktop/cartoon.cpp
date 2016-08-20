@@ -80,7 +80,7 @@ int cartoonifyImage(cv::Mat src, cv::Mat& dst)
 	// Apply binary threshold
 	cv::Mat mask;
 	const int EDGES_THREASHOLD = 15;
-	cv::threshold(edges, dst, EDGES_THREASHOLD, 255, CV_THRESH_BINARY_INV);
+	cv::threshold(edges, mask, EDGES_THREASHOLD, 255, CV_THRESH_BINARY_INV);
 
 	// Reduce the size of original image by a factor of four
 	int factor = 4;
@@ -169,6 +169,70 @@ int bilateralImage(cv::Mat& src, cv::Mat& dst, int factor)
 	return 0;
 }
 
+
+int scharrImageOpenCL(cv::Mat& src, cv::Mat& dst)
+{
+	cv::ocl::oclMat oclSrc = cv::ocl::oclMat(src.size(), CV_8UC3);
+	oclSrc.upload(src);
+
+	cv::ocl::oclMat oclGray;
+
+	cv::ocl::cvtColor(oclSrc, oclGray, CV_BGR2GRAY);
+	const int MEDIAN_BLUR_FILTER_SIZE = 5;
+	cv::ocl::medianFilter(oclGray, oclGray, MEDIAN_BLUR_FILTER_SIZE);
+
+	cv::ocl::oclMat edges, edges2;
+	cv::ocl::Scharr(oclGray, edges, CV_8UC1, 1, 0);
+	cv::ocl::Scharr(oclGray, edges2, CV_8UC1, 1, 0, -1);
+	edges += edges2;
+	const int EVIL_EDGE_THREASHOLD = 12;
+	cv::ocl::oclMat mask;
+	cv::ocl::threshold(edges, mask, EVIL_EDGE_THREASHOLD, 255, CV_THRESH_BINARY_INV);
+	cv::ocl::medianFilter(mask, mask, 3);
+
+	// Reduce the size of original image by a factor of four
+	int factor = 4;
+	cv::Size size = oclSrc.size();
+	cv::Size smallSize;
+	smallSize.width = size.width / (factor / 2);
+	smallSize.height = size.height / (factor / 2);
+
+	cv::Mat smallImage = cv::Mat(smallSize, CV_8UC3);
+
+	cv::ocl::oclMat smallOclImage = cv::ocl::oclMat(smallSize, CV_8UC3);
+	cv::ocl::resize(oclSrc, smallOclImage, smallSize, 0, 0, CV_INTER_LINEAR);
+
+	// Bilateral Filter
+	cv::ocl::oclMat tmp = cv::ocl::oclMat(smallSize, CV_8UC3);
+	int repetitions = 7; // Repetitions for strong cartoon effect.
+	for (int i = 0; i < repetitions; i++)
+	{
+		int ksize = 5; // Filter size. Has a large effect on speed.
+		double sigmaColor = 10; // Filer color strength;
+		double sigmaSpace = 10; // Spatial strength.  Affects speed.
+		cv::ocl::bilateralFilter(smallOclImage, tmp, ksize, sigmaColor, sigmaSpace);
+		cv::ocl::bilateralFilter(tmp, smallOclImage, ksize, sigmaColor, sigmaSpace);
+	}
+
+	// Expand the image back to the original size
+	cv::ocl::oclMat bigOclImage;
+	cv::ocl::resize(smallOclImage, bigOclImage, size, 0, 0, CV_INTER_LINEAR);
+
+	cv::ocl::oclMat image = cv::ocl::oclMat(size, CV_8UC3);
+	image.setTo(0);
+	bigOclImage.copyTo(image, mask);
+	image.download(dst);
+
+	return 0;
+
+
+
+
+
+	return 0;
+
+
+}
 
 
 
