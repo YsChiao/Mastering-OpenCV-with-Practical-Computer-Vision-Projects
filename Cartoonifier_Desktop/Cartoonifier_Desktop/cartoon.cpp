@@ -4,7 +4,7 @@
 #include <time.h>
 #include <iostream>
 
-int cartoonifyImageOpenCL(cv::Mat src, cv::Mat& dst)
+int cartoonifyImageOpenCL(cv::Mat& src, cv::Mat& dst)
 {
 	// Convert image containter 
 	cv::ocl::oclMat srcImage;
@@ -225,14 +225,75 @@ int scharrImageOpenCL(cv::Mat& src, cv::Mat& dst)
 
 	return 0;
 
+}
 
 
+int colorFaceOpenCL(cv::Mat& src, cv::Mat& dst) 
+{
+	// Draw the color face onto a black background.
+	cv::Mat faceOutline = cv::Mat(src.size(), CV_8UC3, double(0));
+	//faceOutline.setTo(0);
+	cv::Scalar color = CV_RGB(255, 0, 0);  // Yellow.
+	int thickness = 4;
+	// Use 70% of the screen height as the face height.
+	int sw = src.size().width;
+	int sh = src.size().height;
+	int faceH = sh / 2 * 70 / 100; // "faceH" is the radius of the elipse.
+	// Scale the width to be the same shape for any screen width
+	int faceW = faceH * 72 / 100;
+	// Draw the face outline.
+	cv::ellipse(faceOutline, cv::Point(sw / 2, sh / 2), cv::Size(faceW, faceH), 0, 0, 360, color, thickness, CV_AA);
 
 
+	// Draw the eye outlines, as 2 arcs per eye.
+	int eyeW = faceW * 23 / 100;
+	int eyeH = faceH * 11 / 100;
+	int eyeX = faceW * 48 / 100;
+	int eyeY = faceH * 13 / 100;
+	cv::Size eyeSize = cv::Size(eyeW, eyeH);
+	// Set the angle  and shift for the eye half ellipses.
+	int eyeA = 15; // angle in degrees.
+	int eyeYshift = 11;
+
+	// Draw the top of the right eye
+	cv::ellipse(faceOutline, cv::Point(sw / 2 - eyeX, sh / 2 - eyeY), eyeSize, 0, 180 + eyeA, 360 - eyeA, color, thickness, CV_AA);
+	// Draw the bottom of the right eye.
+	cv::ellipse(faceOutline, cv::Point(sw / 2 - eyeX, sh / 2 - eyeY - eyeYshift), eyeSize, 0, 0 + eyeA, 180 - eyeA, color, thickness, CV_AA);
+	// Draw the top of the left eye.
+	cv::ellipse(faceOutline, cv::Point(sw / 2 + eyeX, sh / 2 - eyeY), eyeSize, 0, 180 + eyeA, 360 - eyeA, color, thickness, CV_AA);
+	// Draw the bottom of the left eye.
+	cv::ellipse(faceOutline, cv::Point(sw / 2 + eyeX, sh / 2 - eyeY - eyeYshift), eyeSize, 0, 0 + eyeA, 180 - eyeA, color, thickness, CV_AA);
+
+
+	// Draw the bottom lip of the mouth.
+	int mouthY = faceH * 48 / 100;
+	int mouthW = faceW * 45 / 100;
+	int mouthH = faceH * 6 / 100;
+	cv::ellipse(faceOutline, cv::Point(sw / 2, sh / 2 + mouthY), cv::Size(mouthW, mouthH), 0, 0, 180, color, thickness, CV_AA);
+
+	// Draw anti-aliased text
+	int fontFace = CV_FONT_HERSHEY_COMPLEX;
+	float fontScale = 1.0f;
+	int fontThickness = 2;
+	std::string szMsg = "Put your face here";
+	cv::putText(faceOutline, szMsg, cv::Point(sw * 23 / 100, sh * 10 / 100), fontFace, fontScale, color, fontThickness, CV_AA);
+
+
+	// Use OPENCL, but with even slow speed. upload and download need more time than OPENCL computing
+	//cv::ocl::oclMat srcOcl = cv::ocl::oclMat(src.size(), CV_8UC3);
+	//cv::ocl::oclMat faceOutlineOcl = cv::ocl::oclMat(faceOutline.size(), CV_8UC3);
+	//cv::ocl::oclMat dstOcl = cv::ocl::oclMat(dst.size(), CV_8UC3);
+	//srcOcl.upload(src);
+	//faceOutlineOcl.upload(faceOutline);
+	//cv::ocl::addWeighted(srcOcl, 1.0, faceOutlineOcl, 0.7, 0, dstOcl);
+	//dstOcl.download(dst);
+
+
+	cv::addWeighted(src, 1.0, faceOutline, 0.8, 0, dst, CV_8UC3);
 	return 0;
 
-
 }
+
 
 
 

@@ -10,6 +10,7 @@ int cartoonifyImage(cv::Mat src, cv::Mat& dst);
 
 
 int scharrImageOpenCL(cv::Mat& src, cv::Mat& dst);
-int cartoonifyImageOpenCL(cv::Mat src, cv::Mat& dst);
+int cartoonifyImageOpenCL(cv::Mat& src, cv::Mat& dst);
+int colorFaceOpenCL(cv::Mat& src, cv::Mat& dst);
 
 #endif
