@@ -50,7 +50,8 @@ int main(int argc, char *argv[])
 		// Create a blank output image,  that we will draw onto
 		cv::Mat displayedFrame(cameraFrame.size(), CV_8UC3);
 		//cartoonifyImage(cameraFrame, displayedFrame); // CPU implementation
-		cartoonifyImageOpenCL(cameraFrame, displayedFrame); // OPENCL 
+		//cartoonifyImageOpenCL(cameraFrame, displayedFrame); // OPENCL 
+		colorFaceOpenCL(cameraFrame, displayedFrame); 
 
 		// Calculate fps for video processing
 		// fps counter begin
@@ -59,23 +60,25 @@ int main(int argc, char *argv[])
 			time(&start);
 		} // fps counter end
 
-
-		// Display the processed image onto the screen
-		cv::imshow("Cartoonifier", displayedFrame);
-		//std::cout << "Frames displayed : " << count << std::endl;
-
 		time(&end);
 		count++;
 		double sec = difftime(end, start);
 		fps = count / sec;
 		if (count > 10)
 		{
+			std::string fps_str = "fps: " + std::to_string(int(fps)); 
+			cv::putText(displayedFrame, fps_str, cv::Point(550, 450), CV_FONT_HERSHEY_COMPLEX, 0.5, Scalar(0, 200, 200), 1, CV_AA);
+
 			std::cout << fps << " fps" << std::endl;
 		}
 		if (count == (INT_MAX - 1000))
 		{
 			count = 0;
 		}
+
+		// Display the processed image onto the screen
+		cv::imshow("Cartoonifier", displayedFrame);
+		//std::cout << "Frames displayed : " << count << std::endl;
 
 		// IMPORTANT: Wait for at least 20 milliseconds,
 		// so that the image can be displayed on the screen!
