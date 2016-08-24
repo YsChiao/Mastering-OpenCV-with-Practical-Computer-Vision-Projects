@@ -234,7 +234,7 @@ int colorFaceOpenCL(cv::Mat& src, cv::Mat& dst)
 	cv::Mat faceOutline = cv::Mat(src.size(), CV_8UC3, double(0));
 	//faceOutline.setTo(0);
 	cv::Scalar color = CV_RGB(255, 0, 0);  // Yellow.
-	int thickness = 4;
+	int thickness = 1;
 	// Use 70% of the screen height as the face height.
 	int sw = src.size().width;
 	int sh = src.size().height;
@@ -273,8 +273,8 @@ int colorFaceOpenCL(cv::Mat& src, cv::Mat& dst)
 
 	// Draw anti-aliased text
 	int fontFace = CV_FONT_HERSHEY_COMPLEX;
-	float fontScale = 1.0f;
-	int fontThickness = 2;
+	float fontScale = 0.5f;
+	int fontThickness = 1;
 	std::string szMsg = "Put your face here";
 	cv::putText(faceOutline, szMsg, cv::Point(sw * 23 / 100, sh * 10 / 100), fontFace, fontScale, color, fontThickness, CV_AA);
 
@@ -294,6 +294,182 @@ int colorFaceOpenCL(cv::Mat& src, cv::Mat& dst)
 
 }
 
+
+int skinColorChangerOpenCL(cv::Mat& src, cv::Mat& dst)
+{
+
+	//// OPENCL 
+	// Convert image containter 
+	cv::ocl::oclMat srcOclImage;
+	srcOclImage.upload(src);
+
+	//// Convert to gray image;
+	//cv::ocl::oclMat grayOclImage;
+	//cv::ocl::cvtColor(srcOclImage, grayOclImage, CV_BGR2GRAY);
+
+	//// SET MEDIAN FILTER SIZE
+	//const int MEDIAN_BLUR_FILTER_SIZE = 5;
+	//cv::ocl::medianFilter(grayOclImage, grayOclImage, MEDIAN_BLUR_FILTER_SIZE);
+
+	//// Calculate edges
+	//cv::ocl::oclMat edgesOclImage;
+	//const int LPALACIAN_FILTER_SIZE = 3;
+	//cv::ocl::Laplacian(grayOclImage, edgesOclImage, CV_8U, LPALACIAN_FILTER_SIZE);
+
+
+	// Non-OPENCL
+	// Convert to gray
+	cv::Mat grayImage = cv::Mat(src.size(), CV_8UC1);
+	cv::cvtColor(src, grayImage, CV_BGR2GRAY);
+
+	// Median Filter and Lapalacian Filter
+	cv::medianBlur(grayImage, grayImage, 7);
+	cv::Mat edgesImage;
+	cv::Laplacian(grayImage, edgesImage, CV_8U, 5);
+
+	// Reduce the size of original image by a factor of four
+	int factor = 4;
+	cv::Size size = src.size();
+	cv::Size smallSize;
+	smallSize.width = size.width / (factor / 2);
+	smallSize.height = size.height / (factor / 2);
+
+	cv::ocl::oclMat smallOclImage = cv::ocl::oclMat(smallSize, CV_8UC3);
+	cv::ocl::resize(srcOclImage, smallOclImage, smallSize, 0, 0, CV_INTER_LINEAR);
+
+	// Bilateral Filter, using OPENCL to speed up
+	cv::ocl::oclMat tmp = cv::ocl::oclMat(smallSize, CV_8UC3);
+	int repetitions = 7; // Repetitions for strong cartoon effect.
+	for (int i = 0; i < repetitions; i++)
+	{
+		int ksize = 5; // Filter size. Has a large effect on speed.
+		double sigmaColor = 10; // Filer color strength;
+		double sigmaSpace = 10; // Spatial strength.  Affects speed.
+		cv::ocl::bilateralFilter(smallOclImage, tmp, ksize, sigmaColor, sigmaSpace);
+		cv::ocl::bilateralFilter(tmp, smallOclImage, ksize, sigmaColor, sigmaSpace);
+	}
+
+	// Draw the color face onto a black background.
+	cv::Mat faceOutline = cv::Mat(src.size(), CV_8UC3, double(0));
+	//faceOutline.setTo(0);
+	cv::Scalar color = CV_RGB(255, 0, 0);  // Yellow.
+	int thickness = 1;
+	// Use 70% of the screen height as the face height.
+	int sw = src.size().width;
+	int sh = src.size().height;
+	int faceH = sh / 2 * 70 / 100; // "faceH" is the radius of the elipse.
+	// Scale the width to be the same shape for any screen width
+	int faceW = faceH * 72 / 100;
+	// Draw the face outline.
+	cv::ellipse(faceOutline, cv::Point(sw / 2, sh / 2), cv::Size(faceW, faceH), 0, 0, 360, color, thickness, CV_AA);
+
+	// Draw the eye outlines, as 2 arcs per eye.
+	int eyeW = faceW * 23 / 100;
+	int eyeH = faceH * 11 / 100;
+	int eyeX = faceW * 48 / 100;
+	int eyeY = faceH * 13 / 100;
+	cv::Size eyeSize = cv::Size(eyeW, eyeH);
+	// Set the angle  and shift for the eye half ellipses.
+	int eyeA = 15; // angle in degrees.
+	int eyeYshift = 11;
+
+	// Draw the top of the right eye
+	cv::ellipse(faceOutline, cv::Point(sw / 2 - eyeX, sh / 2 - eyeY), eyeSize, 0, 180 + eyeA, 360 - eyeA, color, thickness, CV_AA);
+	// Draw the bottom of the right eye.
+	cv::ellipse(faceOutline, cv::Point(sw / 2 - eyeX, sh / 2 - eyeY - eyeYshift), eyeSize, 0, 0 + eyeA, 180 - eyeA, color, thickness, CV_AA);
+	// Draw the top of the left eye.
+	cv::ellipse(faceOutline, cv::Point(sw / 2 + eyeX, sh / 2 - eyeY), eyeSize, 0, 180 + eyeA, 360 - eyeA, color, thickness, CV_AA);
+	// Draw the bottom of the left eye.
+	cv::ellipse(faceOutline, cv::Point(sw / 2 + eyeX, sh / 2 - eyeY - eyeYshift), eyeSize, 0, 0 + eyeA, 180 - eyeA, color, thickness, CV_AA);
+
+
+	// Draw the bottom lip of the mouth.
+	int mouthY = faceH * 48 / 100;
+	int mouthW = faceW * 45 / 100;
+	int mouthH = faceH * 6 / 100;
+	cv::ellipse(faceOutline, cv::Point(sw / 2, sh / 2 + mouthY), cv::Size(mouthW, mouthH), 0, 0, 180, color, thickness, CV_AA);
+
+	// Draw anti-aliased text
+	int fontFace = CV_FONT_HERSHEY_COMPLEX;
+	float fontScale = 0.5f;
+	int fontThickness = 1;
+	std::string szMsg = "Put your face here";
+	cv::putText(faceOutline, szMsg, cv::Point(sw * 23 / 100, sh * 10 / 100), fontFace, fontScale, color, fontThickness, CV_AA);
+	cv::addWeighted(dst, 1.0, faceOutline, 0.8, 0, dst, CV_8UC3);
+
+	// YCrCb Image
+	cv::Mat smallImage = cv::Mat(smallSize, CV_8UC3);
+	smallOclImage.download(smallImage);
+	cv::Mat yuvImage = cv::Mat(smallSize, CV_8UC3);
+	cv::cvtColor(smallImage, yuvImage, CV_BGR2YCrCb);
+
+	// Mask of skin color
+	sw = smallSize.width;
+	sh = smallSize.height;
+	cv::Mat mask, maskPlusBorder, edges;
+
+	edges = edgesImage;
+	//edgesOclImage.download(edges);
+	maskPlusBorder = cv::Mat::zeros(sh + 2, sw + 2, CV_8UC1); // black-white mask.
+	mask = maskPlusBorder(cv::Rect(1, 1, sw, sh)); // maks is in maskPlusBorder.
+	cv::resize(edges, mask, smallSize); // Put edges in both of them.
+
+	// Apply binary threshold
+	const int EDGES_THREASHOLD = 40;
+	cv::threshold(mask, mask, EDGES_THREASHOLD, 255, CV_THRESH_BINARY);
+	cv::dilate(mask, mask, cv::Mat());
+	cv::erode(mask, mask, cv::Mat());
+
+	// 6 Points 
+	int const NUM_SKIN_POINTS = 6;
+	cv::Point skinPts[NUM_SKIN_POINTS];
+	skinPts[0] = cv::Point(sw / 2, sh / 2 - sh / 6);
+	skinPts[1] = cv::Point(sw / 2 - sw / 11, sh / 2 - sh / 6);
+	skinPts[2] = cv::Point(sw / 2 + sw / 11, sh / 2 - sh / 6);
+	skinPts[3] = cv::Point(sw / 2, sh / 2 + sh / 16);
+	skinPts[4] = cv::Point(sw / 2 - sw / 9, sh / 2 + sh / 16);
+	skinPts[5] = cv::Point(sw / 2 + sw / 9, sh / 2 + sh / 16);
+	
+	// Draw 6 points
+	//for (int i = 0; i < NUM_SKIN_POINTS; i++)
+	{
+		cv::circle(smallImage, skinPts[1], 1, cv::Scalar(255, 0, 0));
+		cv::circle(smallImage, skinPts[4], 1, cv::Scalar(255, 0, 0));
+	}
+
+	// YCrCb
+	const int LOWER_Y = 60;
+	const int UPPER_Y = 80;
+	const int LOWER_Cr = 25;
+	const int UPPER_Cr = 15;
+	const int LOWER_Cb = 20;
+	const int UPPER_Cb = 15;
+	cv::Scalar lowerDiff = cv::Scalar(LOWER_Y, LOWER_Cr, LOWER_Cb);
+	cv::Scalar upperDiff = cv::Scalar(UPPER_Y, UPPER_Cr, UPPER_Cb);
+
+	// Color changer
+	const int CONNECTED_COMPONENTS = 4; // To fill diagonally, use 8.
+	const int flags = CONNECTED_COMPONENTS | cv::FLOODFILL_FIXED_RANGE | cv::FLOODFILL_MASK_ONLY;
+	cv::Mat edgeMask = mask.clone(); // Keep a copy of the edge mask.
+	
+	// "maskPlusBorder" is initialized with edges to block floodFill().
+	for (int i = 0; i< NUM_SKIN_POINTS; i++) 
+	{
+		cv::floodFill(yuvImage, maskPlusBorder, skinPts[i], cv::Scalar(), NULL, lowerDiff, upperDiff, flags);
+	}
+
+	mask -= edgeMask;
+	//smallImage.copyTo(dst, mask);
+	cv::add(smallImage, cv::Scalar(0, 70, 0), smallImage, mask);
+
+	// Expand the image back to the original size
+	cv::resize(smallImage, dst, src.size(), 0, 0, CV_INTER_LINEAR);
+	//dst = mask;
+
+	//dst = smallImage;
+	return 0;
+
+}
 
 
 

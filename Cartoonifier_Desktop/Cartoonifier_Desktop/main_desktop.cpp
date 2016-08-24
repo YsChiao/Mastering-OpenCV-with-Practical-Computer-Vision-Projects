@@ -47,11 +47,18 @@ int main(int argc, char *argv[])
 			exit(1);
 		}
 
+
 		// Create a blank output image,  that we will draw onto
 		cv::Mat displayedFrame(cameraFrame.size(), CV_8UC3);
 		//cartoonifyImage(cameraFrame, displayedFrame); // CPU implementation
 		//cartoonifyImageOpenCL(cameraFrame, displayedFrame); // OPENCL 
-		colorFaceOpenCL(cameraFrame, displayedFrame); 
+		//colorFaceOpenCL(cameraFrame, displayedFrame); 
+		skinColorChangerOpenCL(cameraFrame, displayedFrame);
+
+
+		// Get the size of displayed image, in order to place the text. 
+		int FrameH = displayedFrame.size().height;
+		int FrameW = displayedFrame.size().width;
 
 		// Calculate fps for video processing
 		// fps counter begin
@@ -67,7 +74,7 @@ int main(int argc, char *argv[])
 		if (count > 10)
 		{
 			std::string fps_str = "fps: " + std::to_string(int(fps)); 
-			cv::putText(displayedFrame, fps_str, cv::Point(550, 450), CV_FONT_HERSHEY_COMPLEX, 0.5, Scalar(0, 200, 200), 1, CV_AA);
+			cv::putText(displayedFrame, fps_str, cv::Point(FrameW/2, FrameH/2), CV_FONT_HERSHEY_COMPLEX, 0.5, Scalar(0, 200, 200), 1, CV_AA);
 
 			std::cout << fps << " fps" << std::endl;
 		}
