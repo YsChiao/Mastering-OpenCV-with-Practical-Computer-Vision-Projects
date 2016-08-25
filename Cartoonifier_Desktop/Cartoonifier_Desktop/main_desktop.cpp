@@ -105,6 +105,7 @@
 
 #include <opencv2\core\core.hpp>
 #include <opencv2\highgui\highgui.hpp>
+#include <opencv2\imgproc\imgproc.hpp>
 #include <iostream>
 #include <time.h>
 #include "cartoon.h"
@@ -124,10 +125,16 @@ int main(int argc, char *argv[])
 	}
 
 //============================== simple test ============================================
+	cv::resize(image, image, cv::Size(320, 240), 0, 0, CV_INTER_LINEAR);
+
+
 	Mat result;
 	skinColorChangerOpenCL(image, result);
 
-	imshow("Display Image", result);
+	Mat show;
+	imagePlot(show, { image, image, image, result }, 2, 2);
+
+	imshow("Display Image", show);
 
 	char keypress = cv::waitKey(0); // Need this to see anything!
 	if (keypress == 27 || keypress == 113) // Escape key

@@ -1,8 +1,67 @@
 #include "cartoon.h"
 #include <opencv2\imgproc\imgproc.hpp>
+#include <opencv2\highgui\highgui.hpp>
 #include <opencv2\ocl\ocl.hpp>
 #include <time.h>
 #include <iostream>
+#include <vector>
+
+using namespace std;
+using namespace cv;
+
+int imagePlot(cv::Mat& result,  std::initializer_list <cv::Mat> list, int row, int column)
+{
+	if (column <= 0 || row <= 0 || list.size() != row * column)
+	{
+		std::cerr << "input error" << std::endl;
+		return -1;
+	}
+
+	cv::Mat temp;
+	std::vector<cv::Mat> combine;
+
+	for (auto ptr : list)
+	{
+		combine.push_back(ptr);
+	}
+
+	int number = 0;
+	std::vector<cv::Mat> hcombine;
+	for (int i = 0; i < row; i++)
+	{
+		for (int j = 0; j < column; j++)
+		{
+			if (j == 0)
+			{
+				temp = combine.at(number);
+				number++;
+			}
+			else
+			{
+				cv::hconcat(temp, combine.at(number), temp);
+				number++;
+			}
+
+		}
+		hcombine.push_back(temp);
+	}
+
+	for (int i = 0; i < row; i++)
+	{
+		if (i == 0)
+		{
+			result = hcombine.at(i);
+		}
+		else
+		{ 
+			cv::Mat vtemp = hcombine.at(i);
+			cv::vconcat(result, vtemp, result);
+		}
+	}
+
+	return 0;
+}
+
 
 int cartoonifyImageOpenCL(cv::Mat& src, cv::Mat& dst)
 {
@@ -53,7 +112,7 @@ int cartoonifyImageOpenCL(cv::Mat& src, cv::Mat& dst)
 	// Expand the image back to the original size
 	cv::ocl::oclMat bigOclImage;
 	cv::ocl::resize(smallOclImage, bigOclImage, size, 0, 0, CV_INTER_LINEAR);
-	
+
 	cv::ocl::oclMat image = cv::ocl::oclMat(size, CV_8UC3);
 	image.setTo(0);
 	bigOclImage.copyTo(image, mask);
@@ -66,7 +125,7 @@ int cartoonifyImageOpenCL(cv::Mat& src, cv::Mat& dst)
 
 int cartoonifyImage(cv::Mat src, cv::Mat& dst)
 {
-	cv::Mat gray;	
+	cv::Mat gray;
 	cv::cvtColor(src, gray, CV_BGR2GRAY);
 
 	// SET MEDIAN FILTER SIZE
@@ -228,7 +287,7 @@ int scharrImageOpenCL(cv::Mat& src, cv::Mat& dst)
 }
 
 
-int colorFaceOpenCL(cv::Mat& src, cv::Mat& dst) 
+int colorFaceOpenCL(cv::Mat& src, cv::Mat& dst)
 {
 	// Draw the color face onto a black background.
 	cv::Mat faceOutline = cv::Mat(src.size(), CV_8UC3, double(0));
@@ -334,7 +393,7 @@ int skinColorChangerOpenCL(cv::Mat& src, cv::Mat& dst)
 	cv::Mat mask, maskPlusBorder;
 	maskPlusBorder = cv::Mat::zeros(sh + 2, sw + 2, CV_8UC1); // black-white mask.
 	mask = maskPlusBorder(cv::Rect(1, 1, sw, sh)); // maks is in maskPlusBorder.
-	
+
 	// Apply binary threshold
 	const int EDGES_THREASHOLD = 100;
 	cv::threshold(edges, mask, EDGES_THREASHOLD, 255, CV_THRESH_BINARY_INV);
@@ -422,7 +481,7 @@ int skinColorChangerOpenCL(cv::Mat& src, cv::Mat& dst)
 	// Mask of skin color
 	int smallSW = smallSize.width;
 	int smallSH = smallSize.height;
-	cv::Mat smallMask, smallMaskPlusBorder; 
+	cv::Mat smallMask, smallMaskPlusBorder;
 	smallMaskPlusBorder = cv::Mat::zeros(smallSH + 2, smallSW + 2, CV_8UC1); // black-white mask.
 	smallMask = smallMaskPlusBorder(cv::Rect(1, 1, smallSW, smallSH)); // maks is in maskPlusBorder.
 	cv::resize(edges, smallMask, smallSize); // Put edges in both of them.
@@ -441,7 +500,7 @@ int skinColorChangerOpenCL(cv::Mat& src, cv::Mat& dst)
 	skinPts[3] = cv::Point(smallSW / 2, smallSH / 2 + smallSH / 16);
 	skinPts[4] = cv::Point(smallSW / 2 - smallSW / 9, smallSH / 2 + smallSH / 16);
 	skinPts[5] = cv::Point(smallSW / 2 + smallSW / 9, smallSH / 2 + smallSH / 16);
-	
+
 	//// Draw 6 points
 	//for (int i = 0; i < NUM_SKIN_POINTS; i++)
 	//{
@@ -462,9 +521,9 @@ int skinColorChangerOpenCL(cv::Mat& src, cv::Mat& dst)
 	const int CONNECTED_COMPONENTS = 4; // To fill diagonally, use 8.
 	const int flags = CONNECTED_COMPONENTS | cv::FLOODFILL_FIXED_RANGE | cv::FLOODFILL_MASK_ONLY;
 	cv::Mat smallEdgeMask = smallMask.clone(); // Keep a copy of the edge mask.
-	
+
 	// "maskPlusBorder" is initialized with edges to block floodFill().
-	for (int i = 0; i< NUM_SKIN_POINTS - 1; i++) 
+	for (int i = 0; i < NUM_SKIN_POINTS - 1; i++)
 	{
 		// Draw points
 		cv::circle(smallImage, skinPts[i], 1, cv::Scalar(255, 0, 0));
