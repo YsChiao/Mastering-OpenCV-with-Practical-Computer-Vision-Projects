@@ -132,7 +132,7 @@ int main(int argc, char *argv[])
 	skinColorChangerOpenCL(image, result);
 
 	Mat show;
-	imagePlot(show, { image, image, image, result }, 2, 2);
+	imagePlot(show, { image, image, image, image, result }, 4, 2);
 
 	imshow("Display Image", show);
 

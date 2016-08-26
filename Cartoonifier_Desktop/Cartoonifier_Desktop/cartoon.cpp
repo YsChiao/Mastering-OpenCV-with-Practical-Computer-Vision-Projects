@@ -9,9 +9,14 @@
 using namespace std;
 using namespace cv;
 
-int imagePlot(cv::Mat& result,  std::initializer_list <cv::Mat> list, int row, int column)
+
+
+// Plot the image as the array as you like.
+// Result is the final image, and list is the image list.
+// Row and column are the size of the display arrya as you want.
+int imagePlot(cv::Mat& result, std::initializer_list <cv::Mat> list, int row, int column)
 {
-	if (column <= 0 || row <= 0 || list.size() != row * column)
+	if (column <= 0 || row <= 0)
 	{
 		std::cerr << "input error" << std::endl;
 		return -1;
@@ -26,6 +31,8 @@ int imagePlot(cv::Mat& result,  std::initializer_list <cv::Mat> list, int row, i
 	}
 
 	int number = 0;
+	size_t size = list.size();
+
 	std::vector<cv::Mat> hcombine;
 	for (int i = 0; i < row; i++)
 	{
@@ -38,24 +45,55 @@ int imagePlot(cv::Mat& result,  std::initializer_list <cv::Mat> list, int row, i
 			}
 			else
 			{
+				if (number == size)
+				{
+					break;
+				}
 				cv::hconcat(temp, combine.at(number), temp);
 				number++;
 			}
 
 		}
+		if (number == size)
+		{
+			hcombine.push_back(temp);
+			break;
+		}
 		hcombine.push_back(temp);
 	}
 
+	size_t rSize = hcombine.size();
 	for (int i = 0; i < row; i++)
 	{
 		if (i == 0)
 		{
+			// Get the first row of images. 
 			result = hcombine.at(i);
 		}
 		else
 		{ 
+			if (i == rSize)
+			{
+				// When no more images, as the number of images is smaller than the size of display array.
+				break;
+			}
 			cv::Mat vtemp = hcombine.at(i);
-			cv::vconcat(result, vtemp, result);
+			
+			cv::Size vsize = vtemp.size(); // size of the second image
+			cv::Size rsize = result.size(); // size of the first image
+			if (vsize == rsize)
+			{
+				// When the size of first image eaquals to the second image
+				cv::vconcat(result, vtemp, result);
+			}
+			else
+			{
+				// When the size of the second image is smaller than the first. 
+				cv::Mat bigImage = cv::Mat::zeros(rsize, CV_8UC3);
+				cv::Rect roi(0, 0, vsize.width, vsize.height);
+				vtemp.copyTo(bigImage(roi));
+				cv::vconcat(result, bigImage, result);
+			}
 		}
 	}
 
