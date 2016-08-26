@@ -1,8 +1,105 @@
 #include "cartoon.h"
 #include <opencv2\imgproc\imgproc.hpp>
+#include <opencv2\highgui\highgui.hpp>
 #include <opencv2\ocl\ocl.hpp>
 #include <time.h>
 #include <iostream>
+#include <vector>
+
+using namespace std;
+using namespace cv;
+
+
+
+// Plot the image as the array as you like.
+// Result is the final image, and list is the image list.
+// Row and column are the size of the display arrya as you want.
+int imagePlot(cv::Mat& result, std::initializer_list <cv::Mat> list, int row, int column)
+{
+	if (column <= 0 || row <= 0)
+	{
+		std::cerr << "input error" << std::endl;
+		return -1;
+	}
+
+	cv::Mat temp;
+	std::vector<cv::Mat> combine;
+
+	for (auto ptr : list)
+	{
+		combine.push_back(ptr);
+	}
+
+	int number = 0;
+	size_t size = list.size();
+
+	std::vector<cv::Mat> hcombine;
+	for (int i = 0; i < row; i++)
+	{
+		for (int j = 0; j < column; j++)
+		{
+			if (j == 0)
+			{
+				temp = combine.at(number);
+				number++;
+			}
+			else
+			{
+				if (number == size)
+				{
+					break;
+				}
+				cv::hconcat(temp, combine.at(number), temp);
+				number++;
+			}
+
+		}
+		if (number == size)
+		{
+			hcombine.push_back(temp);
+			break;
+		}
+		hcombine.push_back(temp);
+	}
+
+	size_t rSize = hcombine.size();
+	for (int i = 0; i < row; i++)
+	{
+		if (i == 0)
+		{
+			// Get the first row of images. 
+			result = hcombine.at(i);
+		}
+		else
+		{ 
+			if (i == rSize)
+			{
+				// When no more images, as the number of images is smaller than the size of display array.
+				break;
+			}
+			cv::Mat vtemp = hcombine.at(i);
+			
+			cv::Size vsize = vtemp.size(); // size of the second image
+			cv::Size rsize = result.size(); // size of the first image
+			if (vsize == rsize)
+			{
+				// When the size of first image eaquals to the second image
+				cv::vconcat(result, vtemp, result);
+			}
+			else
+			{
+				// When the size of the second image is smaller than the first. 
+				cv::Mat bigImage = cv::Mat::zeros(rsize, CV_8UC3);
+				cv::Rect roi(0, 0, vsize.width, vsize.height);
+				vtemp.copyTo(bigImage(roi));
+				cv::vconcat(result, bigImage, result);
+			}
+		}
+	}
+
+	return 0;
+}
+
 
 int cartoonifyImageOpenCL(cv::Mat& src, cv::Mat& dst)
 {
@@ -23,7 +120,7 @@ int cartoonifyImageOpenCL(cv::Mat& src, cv::Mat& dst)
 
 	// Apply binary threshold
 	cv::ocl::oclMat mask;
-	const int EDGES_THREASHOLD = 15;
+	const int EDGES_THREASHOLD = 80;
 	cv::ocl::threshold(edges, mask, EDGES_THREASHOLD, 255, CV_THRESH_BINARY_INV);
 
 	// Reduce the size of original image by a factor of four
@@ -53,7 +150,7 @@ int cartoonifyImageOpenCL(cv::Mat& src, cv::Mat& dst)
 	// Expand the image back to the original size
 	cv::ocl::oclMat bigOclImage;
 	cv::ocl::resize(smallOclImage, bigOclImage, size, 0, 0, CV_INTER_LINEAR);
-	
+
 	cv::ocl::oclMat image = cv::ocl::oclMat(size, CV_8UC3);
 	image.setTo(0);
 	bigOclImage.copyTo(image, mask);
@@ -66,7 +163,7 @@ int cartoonifyImageOpenCL(cv::Mat& src, cv::Mat& dst)
 
 int cartoonifyImage(cv::Mat src, cv::Mat& dst)
 {
-	cv::Mat gray;	
+	cv::Mat gray;
 	cv::cvtColor(src, gray, CV_BGR2GRAY);
 
 	// SET MEDIAN FILTER SIZE
@@ -228,7 +325,7 @@ int scharrImageOpenCL(cv::Mat& src, cv::Mat& dst)
 }
 
 
-int colorFaceOpenCL(cv::Mat& src, cv::Mat& dst) 
+int colorFaceOpenCL(cv::Mat& src, cv::Mat& dst)
 {
 	// Draw the color face onto a black background.
 	cv::Mat faceOutline = cv::Mat(src.size(), CV_8UC3, double(0));
@@ -317,19 +414,30 @@ int skinColorChangerOpenCL(cv::Mat& src, cv::Mat& dst)
 	//cv::ocl::Laplacian(grayOclImage, edgesOclImage, CV_8U, LPALACIAN_FILTER_SIZE);
 
 
-	// Non-OPENCL
+	// ======================= Non-OPENCL image smoothing and edges detection =============================================
 	// Convert to gray
-	cv::Mat grayImage = cv::Mat(src.size(), CV_8UC1);
+	cv::Size size = src.size();
+	cv::Mat grayImage = cv::Mat(size, CV_8UC1);
 	cv::cvtColor(src, grayImage, CV_BGR2GRAY);
 
 	// Median Filter and Lapalacian Filter
 	cv::medianBlur(grayImage, grayImage, 7);
-	cv::Mat edgesImage;
-	cv::Laplacian(grayImage, edgesImage, CV_8U, 5);
+	cv::Mat edges;
+	cv::Laplacian(grayImage, edges, CV_8U, 5);
+
+	// Mask of edges
+	int sh = size.height;
+	int sw = size.width;
+	cv::Mat mask, maskPlusBorder;
+	maskPlusBorder = cv::Mat::zeros(sh + 2, sw + 2, CV_8UC1); // black-white mask.
+	mask = maskPlusBorder(cv::Rect(1, 1, sw, sh)); // maks is in maskPlusBorder.
+
+	// Apply binary threshold
+	const int EDGES_THREASHOLD = 100;
+	cv::threshold(edges, mask, EDGES_THREASHOLD, 255, CV_THRESH_BINARY_INV);
 
 	// Reduce the size of original image by a factor of four
 	int factor = 4;
-	cv::Size size = src.size();
 	cv::Size smallSize;
 	smallSize.width = size.width / (factor / 2);
 	smallSize.height = size.height / (factor / 2);
@@ -349,14 +457,20 @@ int skinColorChangerOpenCL(cv::Mat& src, cv::Mat& dst)
 		cv::ocl::bilateralFilter(tmp, smallOclImage, ksize, sigmaColor, sigmaSpace);
 	}
 
-	// Draw the color face onto a black background.
-	cv::Mat faceOutline = cv::Mat(src.size(), CV_8UC3, double(0));
-	//faceOutline.setTo(0);
+	// OPENCL download
+	cv::Mat smallImage = cv::Mat(smallSize, CV_8UC3);
+	smallOclImage.download(smallImage);
+	cv::Mat bigImage;
+	cv::resize(smallImage, bigImage, size, 0, 0, CV_INTER_LINEAR);
+	dst.setTo(0);
+	bigImage.copyTo(dst, mask);
+
+	// ================================= Showing the user where to put their face =====================================================================
+	// Draw a color face onto a black background.
+	cv::Mat faceOutline = cv::Mat::zeros(size, CV_8UC3);
 	cv::Scalar color = CV_RGB(255, 0, 0);  // Yellow.
-	int thickness = 1;
+	int thickness = 4;
 	// Use 70% of the screen height as the face height.
-	int sw = src.size().width;
-	int sh = src.size().height;
 	int faceH = sh / 2 * 70 / 100; // "faceH" is the radius of the elipse.
 	// Scale the width to be the same shape for any screen width
 	int faceW = faceH * 72 / 100;
@@ -382,7 +496,6 @@ int skinColorChangerOpenCL(cv::Mat& src, cv::Mat& dst)
 	// Draw the bottom of the left eye.
 	cv::ellipse(faceOutline, cv::Point(sw / 2 + eyeX, sh / 2 - eyeY - eyeYshift), eyeSize, 0, 0 + eyeA, 180 - eyeA, color, thickness, CV_AA);
 
-
 	// Draw the bottom lip of the mouth.
 	int mouthY = faceH * 48 / 100;
 	int mouthW = faceW * 45 / 100;
@@ -391,51 +504,46 @@ int skinColorChangerOpenCL(cv::Mat& src, cv::Mat& dst)
 
 	// Draw anti-aliased text
 	int fontFace = CV_FONT_HERSHEY_COMPLEX;
-	float fontScale = 0.5f;
-	int fontThickness = 1;
+	float fontScale = 1.0f;
+	int fontThickness = 2;
 	std::string szMsg = "Put your face here";
 	cv::putText(faceOutline, szMsg, cv::Point(sw * 23 / 100, sh * 10 / 100), fontFace, fontScale, color, fontThickness, CV_AA);
 	cv::addWeighted(dst, 1.0, faceOutline, 0.8, 0, dst, CV_8UC3);
 
+
+	// ============================================Skin detection and changer ============================================ 
 	// YCrCb Image
-	cv::Mat smallImage = cv::Mat(smallSize, CV_8UC3);
-	smallOclImage.download(smallImage);
 	cv::Mat yuvImage = cv::Mat(smallSize, CV_8UC3);
 	cv::cvtColor(smallImage, yuvImage, CV_BGR2YCrCb);
 
 	// Mask of skin color
-	sw = smallSize.width;
-	sh = smallSize.height;
-	cv::Mat mask, maskPlusBorder, edges;
-
-	edges = edgesImage;
-	//edgesOclImage.download(edges);
-	maskPlusBorder = cv::Mat::zeros(sh + 2, sw + 2, CV_8UC1); // black-white mask.
-	mask = maskPlusBorder(cv::Rect(1, 1, sw, sh)); // maks is in maskPlusBorder.
-	cv::resize(edges, mask, smallSize); // Put edges in both of them.
+	int smallSW = smallSize.width;
+	int smallSH = smallSize.height;
+	cv::Mat smallMask, smallMaskPlusBorder;
+	smallMaskPlusBorder = cv::Mat::zeros(smallSH + 2, smallSW + 2, CV_8UC1); // black-white mask.
+	smallMask = smallMaskPlusBorder(cv::Rect(1, 1, smallSW, smallSH)); // maks is in maskPlusBorder.
+	cv::resize(edges, smallMask, smallSize); // Put edges in both of them.
 
 	// Apply binary threshold
-	const int EDGES_THREASHOLD = 40;
-	cv::threshold(mask, mask, EDGES_THREASHOLD, 255, CV_THRESH_BINARY);
-	cv::dilate(mask, mask, cv::Mat());
-	cv::erode(mask, mask, cv::Mat());
+	cv::threshold(smallMask, smallMask, EDGES_THREASHOLD, 255, CV_THRESH_BINARY);
+	cv::dilate(smallMask, smallMask, cv::Mat());
+	cv::erode(smallMask, smallMask, cv::Mat());
 
 	// 6 Points 
 	int const NUM_SKIN_POINTS = 6;
 	cv::Point skinPts[NUM_SKIN_POINTS];
-	skinPts[0] = cv::Point(sw / 2, sh / 2 - sh / 6);
-	skinPts[1] = cv::Point(sw / 2 - sw / 11, sh / 2 - sh / 6);
-	skinPts[2] = cv::Point(sw / 2 + sw / 11, sh / 2 - sh / 6);
-	skinPts[3] = cv::Point(sw / 2, sh / 2 + sh / 16);
-	skinPts[4] = cv::Point(sw / 2 - sw / 9, sh / 2 + sh / 16);
-	skinPts[5] = cv::Point(sw / 2 + sw / 9, sh / 2 + sh / 16);
-	
-	// Draw 6 points
+	skinPts[0] = cv::Point(smallSW / 2, smallSH / 2 - smallSH / 6);
+	skinPts[1] = cv::Point(smallSW / 2 - smallSW / 11, smallSH / 2 - smallSH / 6);
+	skinPts[2] = cv::Point(smallSW / 2 + smallSW / 11, smallSH / 2 - smallSH / 6);
+	skinPts[3] = cv::Point(smallSW / 2, smallSH / 2 + smallSH / 16);
+	skinPts[4] = cv::Point(smallSW / 2 - smallSW / 9, smallSH / 2 + smallSH / 16);
+	skinPts[5] = cv::Point(smallSW / 2 + smallSW / 9, smallSH / 2 + smallSH / 16);
+
+	//// Draw 6 points
 	//for (int i = 0; i < NUM_SKIN_POINTS; i++)
-	{
-		cv::circle(smallImage, skinPts[1], 1, cv::Scalar(255, 0, 0));
-		cv::circle(smallImage, skinPts[4], 1, cv::Scalar(255, 0, 0));
-	}
+	//{
+	//	cv::circle(smallImage, skinPts[i], 2, cv::Scalar(255, 0, 0));
+	//}
 
 	// YCrCb
 	const int LOWER_Y = 60;
@@ -450,23 +558,24 @@ int skinColorChangerOpenCL(cv::Mat& src, cv::Mat& dst)
 	// Color changer
 	const int CONNECTED_COMPONENTS = 4; // To fill diagonally, use 8.
 	const int flags = CONNECTED_COMPONENTS | cv::FLOODFILL_FIXED_RANGE | cv::FLOODFILL_MASK_ONLY;
-	cv::Mat edgeMask = mask.clone(); // Keep a copy of the edge mask.
-	
+	cv::Mat smallEdgeMask = smallMask.clone(); // Keep a copy of the edge mask.
+
 	// "maskPlusBorder" is initialized with edges to block floodFill().
-	for (int i = 0; i< NUM_SKIN_POINTS; i++) 
+	for (int i = 0; i < NUM_SKIN_POINTS - 1; i++)
 	{
-		cv::floodFill(yuvImage, maskPlusBorder, skinPts[i], cv::Scalar(), NULL, lowerDiff, upperDiff, flags);
+		// Draw points
+		cv::circle(smallImage, skinPts[i], 1, cv::Scalar(255, 0, 0));
+		// Color detect
+		cv::floodFill(yuvImage, smallMaskPlusBorder, skinPts[i], cv::Scalar(), NULL, lowerDiff, upperDiff, flags);
 	}
 
-	mask -= edgeMask;
+	smallMask -= smallEdgeMask;
 	//smallImage.copyTo(dst, mask);
-	cv::add(smallImage, cv::Scalar(0, 70, 0), smallImage, mask);
+	cv::add(smallImage, cv::Scalar(0, 70, 0), smallImage, smallMask);
 
 	// Expand the image back to the original size
-	cv::resize(smallImage, dst, src.size(), 0, 0, CV_INTER_LINEAR);
-	//dst = mask;
-
-	//dst = smallImage;
+	cv::resize(smallImage, dst, size, 0, 0, CV_INTER_LINEAR);
+	//dst = smallMask;
 	return 0;
 
 }

@@ -15,4 +15,9 @@ int colorFaceOpenCL(cv::Mat& src, cv::Mat& dst);
 
 int skinColorChangerOpenCL(cv::Mat& src, cv::Mat& dst);
 
+
+int imagePlot(cv::Mat& result, std::initializer_list <cv::Mat> list, int row, int column);
+
+
+
 #endif
